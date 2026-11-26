@@ -24,6 +24,18 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from clustering import appliquer_agnes, appliquer_dbscan, appliquer_diana
+
+from classification import (
+    detecter_types_attributs,
+    choisir_distance,
+    preparer_classification,
+    diviser_donnees,
+    appliquer_knn,
+    evaluer_classification,
+    get_matrice_confusion,
+    get_rapport_classification,
+    get_predictions
+)
 # ==============================
 # LOAD CSS
 # ==============================
@@ -70,7 +82,7 @@ if st.session_state["page"] == "home":
             <p> Prétraitement, Clustering et Classification</p>
 
             <p><b>Module :</b> Fouille de Données</p>
-            <p><b>Réalisé par :</b> Silya Sadi</p>
+            <p><b>Réalisé par :</b> Silya Sadi & Manel ZANOUN </p>
         </div>
     </div>
     """, height=500)
@@ -154,12 +166,10 @@ if st.session_state["page"] == "volet1":
             st.subheader("Données avant nettoyage")
             st.dataframe(df)
 
-            choix = st.selectbox("Méthode", [
+            choix = st.selectbox("Méthode de nettoyage des données num", [
                 "Aucune",
-                "Supprimer les lignes avec valeurs manquantes",
                 "Remplir par la moyenne",
-                "Remplir par la médiane",
-                "Remplir par le mode"
+                "Remplir par la médiane"
             ])
 
             if st.button("Appliquer nettoyage"):
@@ -172,43 +182,86 @@ if st.session_state["page"] == "volet1":
         # ======================
         # NORMALISATION
         # ======================
+               # ======================
+        # NORMALISATION
+        # ======================
         with tab3:
+
             if "df_clean" in st.session_state:
+
                 df_base = st.session_state["df_clean"]
+
+                st.subheader("Données avant normalisation")
                 st.dataframe(df_base)
-            else:
-                # df_base = df_current
-                st.warning("⚠️ Données non nettoyées")
-                st.stop()
-            methode = st.selectbox("Normalisation", [
-                "Aucune",
-                "Min-Max Scaling",
-                "Standardisation"
-            ])
 
-            if st.button("Appliquer normalisation"):
-                df_norm = normaliser_donnees(df_base, methode)
-                st.session_state["df_norm"] = df_norm
-                
-                st.dataframe(df_norm)
+                # Récupérer les colonnes numériques
+                colonnes = get_colonnes_numeriques(df_base)
 
-            st.markdown("---")
+                st.subheader("Normalisation par colonne")
 
-            col1, col2 = st.columns(2)
+                st.info(
+                    "Choisissez une méthode de normalisation "
+                    "pour chaque colonne numérique."
+                )
 
-            #  Clustering
-            with col1:
-                if "df_clean" in st.session_state or "df_norm" in st.session_state:
+                # Dictionnaire des méthodes
+                methodes = {}
+
+                # Choix pour chaque colonne
+                for col in colonnes:
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.write(col)
+
+                    with col2:
+                        methodes[col] = st.selectbox(
+                            "Méthode",
+                            [
+                                "Aucune",
+                                "Min-Max Scaling",
+                                "Z-score"
+                            ],
+                            key=f"norm_{col}",
+                            label_visibility="collapsed"
+                        )
+
+                # Appliquer la normalisation
+                if st.button("Appliquer normalisation"):
+
+                    df_norm = normaliser_donnees(
+                        df_base, methodes
+                    )
+
+                    st.session_state["df_norm"] = df_norm
+
+                # Afficher les résultats
+                if "df_norm" in st.session_state:
+
+                    st.subheader("Données après normalisation")
+
+                    st.dataframe(
+                        st.session_state["df_norm"]
+                    )
+
+                st.markdown("---")
+
+                # Boutons de navigation
+                col1, col2 = st.columns(2)
+
+                with col1:
                     if st.button("➡️ Clustering"):
                         st.session_state["page"] = "volet2"
                         st.rerun()
 
-            #  Classification
-            with col2:
-                if "df_clean" in st.session_state or "df_norm" in st.session_state:
-                    st.button("➡️ Classification")
-                        
+                with col2:
+                    if st.button("➡️ Classification"):
+                        st.session_state["page"] = "volet3"
+                        st.rerun()
 
+            else:
+                st.warning("⚠️ Données non nettoyées")
         # =========================
         # VISUALISATION
         # =========================
@@ -651,10 +704,431 @@ elif st.session_state["page"] == "volet2":
 # ==============================
 elif st.session_state["page"] == "volet3":
 
-    if st.button("⬅️ Retour au Prétraitement"):
-        st.session_state["page"] = "volet1"
-        st.rerun()
+    # =========================
+    # NAVIGATION
+    # =========================
+    col1, col2 = st.columns(2)
 
-    st.title("Classification")
+    with col1:
 
-    st.info("🚧 Cette partie est en cours de développement...")
+        if st.button("⬅️ Prétraitement"):
+
+            st.session_state["page"] = "volet1"
+            st.rerun()
+
+    with col2:
+
+        if st.button("🏠 Accueil"):
+
+            st.session_state["page"] = "home"
+            st.rerun()
+
+    st.title("Volet 3 : Classification")
+
+    # =========================
+    # RECUPERATION DES DONNEES
+    # =========================
+    if "df_norm" in st.session_state:
+
+        df_class = st.session_state["df_norm"].copy()
+
+        
+
+    elif "df_clean" in st.session_state:
+
+        df_class = st.session_state["df_clean"].copy()
+
+        st.info("Données nettoyées utilisées.")
+
+    else:
+
+        st.warning("Effectuez d'abord le prétraitement.")
+        st.stop()
+
+    if df_class.empty:
+
+        st.warning("Le dataset est vide.")
+        st.stop()
+
+    # =========================
+    # DONNEES A CLASSIFIER
+    # =========================
+    st.subheader("Données à classifier")
+
+    st.dataframe(df_class)
+
+    # =========================
+    # VARIABLE CIBLE Y
+    # =========================
+    cible = st.selectbox(
+        "Variable cible Y (Classe)",
+        df_class.columns.tolist(),
+        index=len(df_class.columns) - 1,
+        key="classification_cible"
+    )
+
+    # =========================
+    # ATTRIBUTS EXPLICATIFS X
+    # =========================
+    colonnes = [
+        col for col in df_class.columns
+        if col != cible
+    ]
+
+    attributs = st.multiselect(
+        "Attributs explicatifs X",
+        colonnes,
+        default=colonnes,
+        key=f"classification_x_{cible}"
+    )
+
+    # =========================
+    # POURCENTAGE DE TEST
+    # =========================
+    pourcentage_test = st.slider(
+        "Pourcentage des données de test (%)",
+        min_value=10,
+        max_value=50,
+        value=20,
+        step=5
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.metric(
+            "Entraînement",
+            f"{100 - pourcentage_test}%"
+        )
+
+    with col2:
+
+        st.metric(
+            "Test",
+            f"{pourcentage_test}%"
+        )
+
+    st.markdown("---")
+
+    # =========================
+    # CHOIX DE L'ALGORITHME
+    # =========================
+    st.subheader("Algorithmes de classification")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        if st.button(
+            "Appliquer KNN",
+            use_container_width=True
+        ):
+
+            st.session_state["algo_class"] = "KNN"
+
+    with col2:
+
+        if st.button(
+            "Naïve Bayes",
+            use_container_width=True
+        ):
+
+            st.session_state["algo_class"] = "NB"
+
+    with col3:
+
+        if st.button(
+            "Arbres",
+            use_container_width=True
+        ):
+
+            st.session_state["algo_class"] = "Arbres"
+
+    # Récupération de l'algorithme sélectionné
+    algo = st.session_state.get("algo_class", None)
+
+    # =========================
+    # KNN
+    # =========================
+    if algo == "KNN":
+
+        st.markdown("---")
+
+        st.header("K-Nearest Neighbors (KNN)")
+
+        if not attributs:
+
+            st.warning("Sélectionnez les attributs X.")
+
+        else:
+
+            # =========================
+            # DETECTION DES TYPES
+            # =========================
+            num_auto, cat_auto = detecter_types_attributs(
+                df_class,
+                attributs
+            )
+
+            # Possibilité de corriger la détection
+            categoriels = st.multiselect(
+                "Attributs qualitatifs ou binaires",
+                attributs,
+                default=cat_auto,
+                key=f"knn_types_{cible}_{tuple(attributs)}"
+            )
+
+            numeriques = [
+                col for col in attributs
+                if col not in categoriels
+            ]
+
+            # =========================
+            # DISTANCE AUTOMATIQUE
+            # =========================
+            distance = choisir_distance(
+                numeriques,
+                categoriels
+            )
+
+            st.info(
+                f"Distance sélectionnée automatiquement : "
+                f"{distance}"
+            )
+
+            # =========================
+            # PREPARATION TRAIN / TEST
+            # =========================
+            try:
+
+                X, y = preparer_classification(
+                    df_class,
+                    attributs,
+                    cible
+                )
+
+                X_train, X_test, y_train, y_test = (
+                    diviser_donnees(
+                        X,
+                        y,
+                        test_size=pourcentage_test / 100
+                    )
+                )
+
+            except ValueError as e:
+
+                st.error(str(e))
+                st.stop()
+
+            # =========================
+            # NOMBRE DE VOISINS
+            # =========================
+            k = st.number_input(
+                "Nombre de voisins K",
+                min_value=1,
+                max_value=len(X_train),
+                value=min(3, len(X_train)),
+                step=1
+            )
+
+            # =========================
+            # EXECUTION DE KNN
+            # =========================
+            if st.button(
+                "Lancer la classification KNN",
+                type="primary"
+            ):
+
+                try:
+
+                    modele, y_pred, distance = appliquer_knn(
+                        X_train,
+                        X_test,
+                        y_train,
+                        int(k),
+                        numeriques,
+                        categoriels
+                    )
+
+                    # =========================
+                    # EVALUATION
+                    # =========================
+                    scores = evaluer_classification(
+                        y_test,
+                        y_pred
+                    )
+
+                    matrice = get_matrice_confusion(
+                        y_test,
+                        y_pred,
+                        modele.classes_
+                    )
+
+                    rapport = get_rapport_classification(
+                        y_test,
+                        y_pred
+                    )
+
+                    predictions = get_predictions(
+                        X_test,
+                        y_test,
+                        y_pred
+                    )
+
+                   
+
+                    # =========================
+                    # RESULTATS
+                    # =========================
+                    st.header("Résultats de KNN")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        st.metric(
+                            "Données d'entraînement",
+                            len(X_train)
+                        )
+
+                    with col2:
+
+                        st.metric(
+                            "Données de test",
+                            len(X_test)
+                        )
+
+                    # =========================
+                    # METRIQUES
+                    # =========================
+                    st.subheader("Performances")
+
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    with col1:
+
+                        st.metric(
+                            "Accuracy",
+                            f"{scores['Accuracy'] * 100:.2f}%"
+                        )
+
+                    with col2:
+
+                        st.metric(
+                            "Precision",
+                            f"{scores['Precision'] * 100:.2f}%"
+                        )
+
+                    with col3:
+
+                        st.metric(
+                            "Recall",
+                            f"{scores['Recall'] * 100:.2f}%"
+                        )
+
+                    with col4:
+
+                        st.metric(
+                            "F1-score",
+                            f"{scores['F1-score'] * 100:.2f}%"
+                        )
+
+                    # =========================
+                    # MATRICE DE CONFUSION
+                    # =========================
+                    st.subheader("Matrice de confusion")
+
+                    st.dataframe(matrice)
+
+                    fig, ax = plt.subplots(figsize=(5, 4))
+
+                    image = ax.imshow(
+                        matrice.values,
+                        cmap="Purples"
+                    )
+
+                    ax.set_xticks(
+                        range(len(matrice.columns))
+                    )
+
+                    ax.set_yticks(
+                        range(len(matrice.index))
+                    )
+
+                    ax.set_xticklabels(matrice.columns)
+                    ax.set_yticklabels(matrice.index)
+
+                    ax.set_xlabel("Classes prédites")
+                    ax.set_ylabel("Classes réelles")
+
+                    for i in range(len(matrice.index)):
+
+                        for j in range(len(matrice.columns)):
+
+                            ax.text(
+                                j,
+                                i,
+                                matrice.iloc[i, j],
+                                ha="center",
+                                va="center"
+                            )
+
+                    fig.colorbar(image)
+
+                    st.pyplot(fig)
+                    plt.close(fig)
+
+                    # =========================
+                    # RAPPORT
+                    # =========================
+                    st.subheader(
+                        "Rapport de classification"
+                    )
+
+                    st.dataframe(rapport.round(4))
+
+                    # =========================
+                    # PREDICTIONS
+                    # =========================
+                    st.subheader("Prédictions")
+
+                    st.dataframe(predictions)
+
+                    # =========================
+                    # TELECHARGEMENT
+                    # =========================
+                    st.download_button(
+                        "Télécharger les prédictions",
+                        data=predictions.to_csv(
+                            index=False
+                        ).encode("utf-8"),
+                        file_name="predictions_knn.csv",
+                        mime="text/csv"
+                    )
+
+                except ValueError as e:
+
+                    st.error(str(e))
+
+    # =========================
+    # NAIVE BAYES
+    # =========================
+    elif algo == "NB":
+
+        st.header("Naïve Bayes")
+
+        st.info(
+            "Cet algorithme sera ajouté prochainement."
+        )
+
+    # =========================
+    # ARBRES DE DECISION
+    # =========================
+    elif algo == "Arbres":
+
+        st.header("Arbres de décision")
+
+        st.info(
+            "Cet algorithme sera ajouté prochainement."
+        )

@@ -36,6 +36,9 @@ from classification import (
     get_rapport_classification,
     get_predictions
 )
+
+from classification import interface_arbres
+
 # ==============================
 # LOAD CSS
 # ==============================
@@ -43,10 +46,8 @@ def load_css():
     with open("style.css", encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-load_css()
-
-
 st.set_page_config(layout="wide")
+load_css()
 
 
 
@@ -738,7 +739,6 @@ elif st.session_state["page"] == "volet3":
 
         df_class = st.session_state["df_clean"].copy()
 
-        st.info("Données nettoyées utilisées.")
 
     else:
 
@@ -845,9 +845,9 @@ elif st.session_state["page"] == "volet3":
 
             st.session_state["algo_class"] = "Arbres"
 
+    
     # Récupération de l'algorithme sélectionné
     algo = st.session_state.get("algo_class", None)
-
     # =========================
     # KNN
     # =========================
@@ -1126,9 +1126,7 @@ elif st.session_state["page"] == "volet3":
     # ARBRES DE DECISION
     # =========================
     elif algo == "Arbres":
-
-        st.header("Arbres de décision")
-
-        st.info(
-            "Cet algorithme sera ajouté prochainement."
-        )
+        if not attributs:
+            st.warning("Sélectionnez les attributs X.")
+        else:
+            interface_arbres(df_class, cible, attributs, pourcentage_test / 100)
